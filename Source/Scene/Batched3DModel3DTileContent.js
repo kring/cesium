@@ -327,7 +327,8 @@ define([
             pickVertexShaderLoaded : getPickVertexShaderCallback(this),
             pickFragmentShaderLoaded : batchTable.getPickFragmentShaderCallback(),
             pickUniformMapLoaded : batchTable.getPickUniformMapCallback(),
-            addBatchIdToGeneratedShaders : (batchLength > 0) // If the batch table has values in it, generated shaders will need a batchId attribute
+            addBatchIdToGeneratedShaders : (batchLength > 0), // If the batch table has values in it, generated shaders will need a batchId attribute
+            pickPrimitive : this._tileset
         });
 
         this._model = model;

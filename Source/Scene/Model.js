@@ -3409,6 +3409,7 @@ define([
                 var owner = {
                     primitive : defaultValue(model.pickPrimitive, model),
                     id : model.id,
+                    model : model,
                     node : runtimeNode.publicNode,
                     mesh : runtimeMeshesByName[mesh.name]
                 };
