@@ -194,7 +194,7 @@ define([
         var batchIdAttributeName = getAttributeOrUniformBySemantic(gltf, '_BATCHID');
         if (!defined(batchIdAttributeName)) {
             batchIdAttributeName = getAttributeOrUniformBySemantic(gltf, 'BATCHID');
-            if (defined(batchIdAttributeName)) {
+        if (defined(batchIdAttributeName)) {
                 Batched3DModel3DTileContent._deprecationWarning('b3dm-legacy-batchid', 'The glTF in this b3dm uses the semantic `BATCHID`. Application-specific semantics should be prefixed with an underscore: `_BATCHID`.');
             }
         }
@@ -206,8 +206,17 @@ define([
             var batchTable = content.batchTable;
             var gltf = content._model.gltf;
             var batchIdAttributeName = getBatchIdAttributeName(gltf);
-            var callback = batchTable.getVertexShaderCallback(true, batchIdAttributeName);
-            return defined(callback) ? callback(vs) : vs;
+            var batchTableCallback = batchTable.getVertexShaderCallback(true, batchIdAttributeName);
+            if (defined(batchTableCallback)) {
+                vs = batchTableCallback(vs);
+            }
+
+            var tilesetCallback = content._tileset._vertexShaderLoaded;
+            if (defined(tilesetCallback)) {
+                vs = tilesetCallback(vs);
+            }
+
+            return vs;
         };
     }
 
@@ -216,8 +225,17 @@ define([
             var batchTable = content.batchTable;
             var gltf = content._model.gltf;
             var batchIdAttributeName = getBatchIdAttributeName(gltf);
-            var callback = batchTable.getPickVertexShaderCallback(batchIdAttributeName);
-            return defined(callback) ? callback(vs) : vs;
+            var batchTableCallback = batchTable.getPickVertexShaderCallback(batchIdAttributeName);
+            if (defined(batchTableCallback)) {
+                vs = batchTableCallback(vs);
+            }
+
+            var tilesetCallback = content._tileset._pickVertexShaderLoaded;
+            if (defined(tilesetCallback)) {
+                vs = tilesetCallback(vs);
+            }
+
+            return vs;
         };
     }
 
@@ -227,8 +245,68 @@ define([
             var gltf = content._model.gltf;
             var diffuseUniformName = getAttributeOrUniformBySemantic(gltf, '_3DTILESDIFFUSE');
             var colorBlendMode = content._tileset.colorBlendMode;
-            var callback = batchTable.getFragmentShaderCallback(true, colorBlendMode, diffuseUniformName);
-            return defined(callback) ? callback(fs) : fs;
+            var batchTableCallback = batchTable.getFragmentShaderCallback(true, colorBlendMode, diffuseUniformName);
+            if (defined(batchTableCallback)) {
+                fs = batchTableCallback(fs);
+            }
+
+            var tilesetCallback = content._tileset._fragmentShaderLoaded;
+            if (defined(tilesetCallback)) {
+                fs = tilesetCallback(fs);
+            }
+
+            return fs;
+        };
+    }
+
+    function getPickFragmentShaderCallback(content) {
+        return function(fs) {
+            var batchTable = content.batchTable;
+            var batchTableCallback = batchTable.getPickFragmentShaderCallback();
+            if (defined(batchTableCallback)) {
+                fs = batchTableCallback(fs);
+            }
+
+            var tilesetCallback = content._tileset._pickFragmentShaderLoaded;
+            if (defined(tilesetCallback)) {
+                fs = tilesetCallback(fs);
+            }
+
+            return fs;
+        };
+    }
+
+    function getUniformMapCallback(content) {
+        return function(uniformMap) {
+            var batchTable = content.batchTable;
+            var batchTableCallback = batchTable.getUniformMapCallback();
+            if (defined(batchTableCallback)) {
+                uniformMap = batchTableCallback(uniformMap);
+            }
+
+            var tilesetCallback = content._tileset._uniformMapLoaded;
+            if (defined(tilesetCallback)) {
+                uniformMap = tilesetCallback(uniformMap);
+            }
+
+            return uniformMap;
+        };
+    }
+
+    function getPickUniformMapCallback(content) {
+        return function(uniformMap) {
+            var batchTable = content.batchTable;
+            var batchTableCallback = batchTable.getPickUniformMapCallback();
+            if (defined(batchTableCallback)) {
+                uniformMap = batchTableCallback(uniformMap);
+            }
+
+            var tilesetCallback = content._tileset._pickUniformMapLoaded;
+            if (defined(tilesetCallback)) {
+                uniformMap = tilesetCallback(uniformMap);
+            }
+
+            return uniformMap;
         };
     }
 
@@ -323,10 +401,10 @@ define([
             incrementallyLoadTextures : false,
             vertexShaderLoaded : getVertexShaderCallback(this),
             fragmentShaderLoaded : getFragmentShaderCallback(this),
-            uniformMapLoaded : batchTable.getUniformMapCallback(),
+            uniformMapLoaded : getUniformMapCallback(this),
             pickVertexShaderLoaded : getPickVertexShaderCallback(this),
-            pickFragmentShaderLoaded : batchTable.getPickFragmentShaderCallback(),
-            pickUniformMapLoaded : batchTable.getPickUniformMapCallback(),
+            pickFragmentShaderLoaded : getPickFragmentShaderCallback(this),
+            pickUniformMapLoaded : getPickUniformMapCallback(this),
             addBatchIdToGeneratedShaders : (batchLength > 0), // If the batch table has values in it, generated shaders will need a batchId attribute
             pickPrimitive : this._tileset
         });
