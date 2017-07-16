@@ -1,4 +1,3 @@
-/*global defineSuite*/
 defineSuite([
         'Scene/ModelInstanceCollection',
         'Core/BoundingSphere',
@@ -114,6 +113,7 @@ defineSuite([
             scene.renderForSpecs();
             return collection.ready;
         }).then(function() {
+            zoomTo(collection, 0);
             return collection;
         });
     }
@@ -577,7 +577,6 @@ defineSuite([
             gltf : boxGltf,
             instances : createInstances(4)
         }).then(function(collection) {
-            zoomTo(collection, 1);
             expect(scene).toPickAndCall(function(result) {
                 var originalMatrix = result.modelMatrix;
                 result.modelMatrix = Matrix4.IDENTITY;
@@ -597,7 +596,6 @@ defineSuite([
             gltf : boxGltf,
             instances : createInstances(4)
         }).then(function(collection) {
-            zoomTo(collection, 1);
             expect(scene).toPickAndCall(function(result) {
                 var originalMatrix = result.modelMatrix;
                 var originalRadius = collection._boundingSphere.radius;
@@ -667,6 +665,21 @@ defineSuite([
 
             // Re-enable extension
             scene.context._instancedArrays = instancedArrays;
+        });
+    });
+
+    it('does not render during morph', function() {
+        return loadCollection({
+            gltf : boxGltf,
+            instances : createInstances(4),
+            cull : false
+        }).then(function() {
+            var commandList = scene.frameState.commandList;
+            scene.renderForSpecs();
+            expect(commandList.length).toBeGreaterThan(0);
+            scene.morphToColumbusView(1.0);
+            scene.renderForSpecs();
+            expect(commandList.length).toBe(0);
         });
     });
 

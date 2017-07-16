@@ -1,11 +1,9 @@
-/*global define*/
 define([
         '../Core/BoundingSphere',
         '../Core/Cartesian3',
+        '../Core/Check',
         '../Core/ColorGeometryInstanceAttribute',
-        '../Core/defined',
         '../Core/defineProperties',
-        '../Core/DeveloperError',
         '../Core/GeometryInstance',
         '../Core/Matrix4',
         '../Core/SphereOutlineGeometry',
@@ -14,10 +12,9 @@ define([
     ], function(
         BoundingSphere,
         Cartesian3,
+        Check,
         ColorGeometryInstanceAttribute,
-        defined,
         defineProperties,
-        DeveloperError,
         GeometryInstance,
         Matrix4,
         SphereOutlineGeometry,
@@ -25,6 +22,16 @@ define([
         Primitive) {
     'use strict';
 
+    /**
+     * A tile bounding volume specified as a sphere.
+     * @alias TileBoundingSphere
+     * @constructor
+     *
+     * @param {Cartesian3} [center=Cartesian3.ZERO] The center of the bounding sphere.
+     * @param {Number} [radius=0.0] The radius of the bounding sphere.
+     *
+     * @private
+     */
     function TileBoundingSphere(center, radius) {
         this._boundingSphere = new BoundingSphere(center, radius);
     }
@@ -95,12 +102,10 @@ define([
      */
     TileBoundingSphere.prototype.distanceToCamera = function(frameState) {
         //>>includeStart('debug', pragmas.debug);
-        if (!defined(frameState)) {
-            throw new DeveloperError('frameState is required.');
-        }
+        Check.defined('frameState', frameState);
         //>>includeEnd('debug');
-        var bs = this._boundingSphere;
-        return Math.max(0.0, Cartesian3.distance(bs.center, frameState.camera.positionWC) - bs.radius);
+        var boundingSphere = this._boundingSphere;
+        return Math.max(0.0, Cartesian3.distance(boundingSphere.center, frameState.camera.positionWC) - boundingSphere.radius);
     };
 
     /**
@@ -114,15 +119,16 @@ define([
      */
     TileBoundingSphere.prototype.intersectPlane = function(plane) {
         //>>includeStart('debug', pragmas.debug);
-        if (!defined(plane)) {
-            throw new DeveloperError('plane is required.');
-        }
+        Check.defined('plane', plane);
         //>>includeEnd('debug');
         return BoundingSphere.intersectPlane(this._boundingSphere, plane);
     };
 
     /**
      * Update the bounding sphere after the tile is transformed.
+     *
+     * @param {Cartesian3} center The center of the bounding sphere.
+     * @param {Number} radius The radius of the bounding sphere.
      */
     TileBoundingSphere.prototype.update = function(center, radius) {
         Cartesian3.clone(center, this._boundingSphere.center);
@@ -137,9 +143,7 @@ define([
      */
     TileBoundingSphere.prototype.createDebugVolume = function(color) {
         //>>includeStart('debug', pragmas.debug);
-        if (!defined(color)) {
-            throw new DeveloperError('color is required.');
-        }
+        Check.defined('color', color);
         //>>includeEnd('debug');
         var geometry = new SphereOutlineGeometry({
             radius: this.radius
