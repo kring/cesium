@@ -1,4 +1,3 @@
-/*global defineSuite*/
 defineSuite([
         'Scene/Tileset3DTileContent',
         'Core/Cartesian3',
@@ -41,16 +40,29 @@ defineSuite([
         return Cesium3DTilesTester.resolvesReadyPromise(scene, tilesetOfTilesetsUrl);
     });
 
-    it('rejects readyPromise on failed request', function() {
-        return Cesium3DTilesTester.rejectsReadyPromiseOnFailedRequest('json');
-    });
-
     it('destroys', function() {
         return Cesium3DTilesTester.tileDestroys(scene, tilesetOfTilesetsUrl);
     });
 
-    it('destroys before loading finishes', function() {
-        return Cesium3DTilesTester.tileDestroysBeforeLoad(scene, tilesetOfTilesetsUrl);
+    it('gets properties', function() {
+        return Cesium3DTilesTester.loadTileset(scene, tilesetOfTilesetsUrl).then(function(tileset) {
+            var tile = tileset._root;
+            var content = tile.content;
+            expect(content.featuresLength).toBe(0);
+            expect(content.pointsLength).toBe(0);
+            expect(content.trianglesLength).toBe(0);
+            expect(content.geometryByteLength).toBe(0);
+            expect(content.texturesByteLength).toBe(0);
+            expect(content.batchTableByteLength).toBe(0);
+            expect(content.innerContents).toBeUndefined();
+            expect(content.readyPromise).toBeDefined();
+            expect(content.tileset).toBe(tileset);
+            expect(content.tile).toBe(tile);
+            expect(content.url).toBeDefined();
+            expect(content.batchTable).toBeUndefined();
+            expect(content.hasProperty(0, 'name')).toBe(false);
+            expect(content.getFeature(0)).toBeUndefined();
+        });
     });
 
 }, 'WebGL');

@@ -1,4 +1,3 @@
-/*global define*/
 define([
         './Cartographic',
         './Check',
@@ -208,7 +207,7 @@ define([
     };
 
     /**
-     * Creates an rectangle given the boundary longitude and latitude in radians.
+     * Creates a rectangle given the boundary longitude and latitude in radians.
      *
      * @param {Number} [west=0.0] The westernmost longitude in radians in the range [-Math.PI, Math.PI].
      * @param {Number} [south=0.0] The southernmost latitude in radians in the range [-Math.PI/2, Math.PI/2].
@@ -299,6 +298,7 @@ define([
         //>>includeStart('debug', pragmas.debug);
         Check.defined('cartesians', cartesians);
         //>>includeEnd('debug');
+        ellipsoid = defaultValue(ellipsoid, Ellipsoid.WGS84);
 
         var west = Number.MAX_VALUE;
         var east = -Number.MAX_VALUE;

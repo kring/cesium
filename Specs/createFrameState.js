@@ -1,4 +1,3 @@
-/*global define*/
 define([
         'Core/defaultValue',
         'Core/GeographicProjection',
@@ -38,6 +37,8 @@ define([
 
         frameState.passes.render = true;
         frameState.passes.pick = false;
+
+        frameState.minimumDisableDepthTestDistance = 0.0;
 
         return frameState;
     }

@@ -1,4 +1,3 @@
-/*global defineSuite*/
 defineSuite([
         'Core/Cartesian3',
         'Core/Color',
@@ -6,6 +5,7 @@ defineSuite([
         'Core/defaultValue',
         'Core/GeometryInstance',
         'Core/loadImage',
+        'Core/Math',
         'Core/Rectangle',
         'Core/RectangleGeometry',
         'Core/Transforms',
@@ -15,6 +15,7 @@ defineSuite([
         'Scene/LabelCollection',
         'Scene/Material',
         'Scene/PerInstanceColorAppearance',
+        'Scene/PerspectiveFrustum',
         'Scene/PolylineCollection',
         'Scene/Primitive',
         'Scene/SceneMode',
@@ -27,6 +28,7 @@ defineSuite([
         defaultValue,
         GeometryInstance,
         loadImage,
+        CesiumMath,
         Rectangle,
         RectangleGeometry,
         Transforms,
@@ -36,6 +38,7 @@ defineSuite([
         LabelCollection,
         Material,
         PerInstanceColorAppearance,
+        PerspectiveFrustum,
         PolylineCollection,
         Primitive,
         SceneMode,
@@ -59,6 +62,15 @@ defineSuite([
 
     afterAll(function() {
         scene.destroyForSpecs();
+    });
+
+    beforeEach(function() {
+        scene.morphTo3D(0.0);
+
+        var camera = scene.camera;
+        camera.frustum = new PerspectiveFrustum();
+        camera.frustum.aspectRatio = scene.drawingBufferWidth / scene.drawingBufferHeight;
+        camera.frustum.fov = CesiumMath.toRadians(60.0);
     });
 
     afterEach(function() {

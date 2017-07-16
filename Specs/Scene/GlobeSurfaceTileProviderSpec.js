@@ -1,4 +1,3 @@
-/*global defineSuite*/
 defineSuite([
         'Scene/GlobeSurfaceTileProvider',
         'Core/Cartesian3',
@@ -607,7 +606,7 @@ defineSuite([
 
         var terrainCredit = new Credit('terrain credit');
         scene.terrainProvider = new CesiumTerrainProvider({
-            url : 'https://assets.agi.com/stk-terrain/world',
+            url : 'https://assets.agi.com/stk-terrain/v1/tilesets/world/tiles',
             credit : terrainCredit
         });
 

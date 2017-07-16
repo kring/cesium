@@ -1,25 +1,21 @@
-/*global define*/
 define([
         '../Core/clone',
-        '../Core/Color',
-        '../Core/defaultValue',
         '../Core/defined',
         '../Core/defineProperties',
         './Expression'
     ], function(
         clone,
-        Color,
-        defaultValue,
         defined,
         defineProperties,
         Expression) {
     'use strict';
 
-    var expressionPlaceholder = /\$\{expression}/g;
-
     /**
+     * An expression for a style applied to a {@link Cesium3DTileset}.
+     * <p>
      * Evaluates a conditions expression defined using the
      * {@link https://github.com/AnalyticalGraphicsInc/3d-tiles/tree/master/Styling|3D Tiles Styling language}.
+     * </p>
      * <p>
      * Implements the {@link StyleExpression} interface.
      * </p>
@@ -28,28 +24,24 @@ define([
      * @constructor
      *
      * @param {Object} [conditionsExpression] The conditions expression defined using the 3D Tiles Styling language.
+     * @param {Object} [defines] Defines in the style.
      *
      * @example
-     * var expression = new Cesium.Expression({
-     *     expression : 'regExp("^1(\\d)").exec(${id})',
+     * var expression = new Cesium.ConditionsExpression({
      *     conditions : [
-     *         ['${expression} === "1"', 'color("#FF0000")'],
-     *         ['${expression} === "2"', 'color("#00FF00")'],
+     *         ['${Area} > 10, 'color("#FF0000")'],
+     *         ['${id} !== "1"', 'color("#00FF00")'],
      *         ['true', 'color("#FFFFFF")']
      *     ]
      * });
      * expression.evaluateColor(frameState, feature, result); // returns a Cesium.Color object
-     *
-     * @see {@link https://github.com/AnalyticalGraphicsInc/3d-tiles/tree/master/Styling|3D Tiles Styling language}
      */
-    function ConditionsExpression(conditionsExpression) {
+    function ConditionsExpression(conditionsExpression, defines) {
         this._conditionsExpression = clone(conditionsExpression, true);
         this._conditions = conditionsExpression.conditions;
-        this._expression = conditionsExpression.expression;
-
         this._runtimeConditions = undefined;
 
-        setRuntime(this);
+        setRuntime(this, defines);
     }
 
     defineProperties(ConditionsExpression.prototype, {
@@ -75,30 +67,22 @@ define([
         this.expression = expression;
     }
 
-    function setRuntime(expression) {
+    function setRuntime(expression, defines) {
         var runtimeConditions = [];
         var conditions = expression._conditions;
-        if (defined(conditions)) {
-            var exp = expression._expression;
-            var length = conditions.length;
-            for (var i = 0; i < length; ++i) {
-                var statement = conditions[i];
-                var cond = String(statement[0]);
-                var condExpression = String(statement[1]);
-                if (defined(exp)) {
-                    cond = cond.replace(expressionPlaceholder, exp);
-                    condExpression = condExpression.replace(expressionPlaceholder, exp);
-                } else {
-                    cond = cond.replace(expressionPlaceholder, 'undefined');
-                    condExpression = condExpression.replace(expressionPlaceholder, 'undefined');
-                }
-                runtimeConditions.push(new Statement(
-                    new Expression(cond),
-                    new Expression(condExpression)
-                ));
-            }
+        if (!defined(conditions)) {
+            return;
         }
-
+        var length = conditions.length;
+        for (var i = 0; i < length; ++i) {
+            var statement = conditions[i];
+            var cond = String(statement[0]);
+            var condExpression = String(statement[1]);
+            runtimeConditions.push(new Statement(
+                new Expression(cond, defines),
+                new Expression(condExpression, defines)
+            ));
+        }
         expression._runtimeConditions = runtimeConditions;
     }
 
@@ -108,42 +92,49 @@ define([
      * {@link https://github.com/AnalyticalGraphicsInc/3d-tiles/tree/master/Styling|3D Tiles Styling language}
      * is of type <code>Boolean</code>, <code>Number</code>, or <code>String</code>, the corresponding JavaScript
      * primitive type will be returned. If the result is a <code>RegExp</code>, a Javascript <code>RegExp</code>
-     * object will be returned. If the result is a <code>Color</code>, a {@link Color} object will be returned.
+     * object will be returned. If the result is a <code>Cartesian2</code>, <code>Cartesian3</code>, or <code>Cartesian4</code>,
+     * a {@link Cartesian2}, {@link Cartesian3}, or {@link Cartesian4} object will be returned. If the <code>result</code> argument is
+     * a {@link Color}, the {@link Cartesian4} value is converted to a {@link Color} and then returned.
      *
      * @param {FrameState} frameState The frame state.
-     * @param {Cesium3DTileFeature} feature The feature who's properties may be used as variables in the expression.
-     * @returns {Boolean|Number|String|Color|RegExp} The result of evaluating the expression.
+     * @param {Cesium3DTileFeature} feature The feature whose properties may be used as variables in the expression.
+     * @param {Object} [result] The object onto which to store the result.
+     * @returns {Boolean|Number|String|RegExp|Cartesian2|Cartesian3|Cartesian4|Color} The result of evaluating the expression.
      */
-    ConditionsExpression.prototype.evaluate = function(frameState, feature) {
+    ConditionsExpression.prototype.evaluate = function(frameState, feature, result) {
         var conditions = this._runtimeConditions;
-        if (defined(conditions)) {
-            var length = conditions.length;
-            for (var i = 0; i < length; ++i) {
-                var statement = conditions[i];
-                if (statement.condition.evaluate(frameState, feature)) {
-                    return statement.expression.evaluate(frameState, feature);
-                }
+        if (!defined(conditions)) {
+            return undefined;
+        }
+        var length = conditions.length;
+        for (var i = 0; i < length; ++i) {
+            var statement = conditions[i];
+            if (statement.condition.evaluate(frameState, feature)) {
+                return statement.expression.evaluate(frameState, feature, result);
             }
         }
     };
 
     /**
      * Evaluates the result of a Color expression, using the values defined by a feature.
-     *
+     * <p>
+     * This is equivalent to {@link ConditionsExpression#evaluate} but always returns a {@link Color} object.
+     * </p>
      * @param {FrameState} frameState The frame state.
-     * @param {Cesium3DTileFeature} feature The feature who's properties may be used as variables in the expression.
+     * @param {Cesium3DTileFeature} feature The feature whose properties may be used as variables in the expression.
      * @param {Color} [result] The object in which to store the result
      * @returns {Color} The modified result parameter or a new Color instance if one was not provided.
      */
     ConditionsExpression.prototype.evaluateColor = function(frameState, feature, result) {
         var conditions = this._runtimeConditions;
-        if (defined(conditions)) {
-            var length = conditions.length;
-            for (var i = 0; i < length; ++i) {
-                var statement = conditions[i];
-                if (statement.condition.evaluate(frameState, feature)) {
-                    return statement.expression.evaluateColor(frameState, feature, result);
-                }
+        if (!defined(conditions)) {
+            return undefined;
+        }
+        var length = conditions.length;
+        for (var i = 0; i < length; ++i) {
+            var statement = conditions[i];
+            if (statement.condition.evaluate(frameState, feature)) {
+                return statement.expression.evaluateColor(frameState, feature, result);
             }
         }
     };
@@ -171,12 +162,9 @@ define([
         var length = conditions.length;
         for (var i = 0; i < length; ++i) {
             var statement = conditions[i];
+
             var condition = statement.condition.getShaderExpression(attributePrefix, shaderState);
             var expression = statement.expression.getShaderExpression(attributePrefix, shaderState);
-
-            if (!defined(condition) || !defined(expression)) {
-                return undefined;
-            }
 
             // Build the if/else chain from the list of conditions
             shaderFunction +=

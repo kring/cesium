@@ -1,19 +1,17 @@
-/*global define*/
 define([
-    '../Core/CompressedTextureBuffer',
-    '../Core/defined',
-    '../Core/PixelFormat',
-    '../Core/RuntimeError',
-    '../ThirdParty/crunch',
-    './createTaskProcessorWorker'
-], function(
-    CompressedTextureBuffer,
-    defined,
-    PixelFormat,
-    RuntimeError,
-    crunch,
-    createTaskProcessorWorker
-) {
+        '../Core/CompressedTextureBuffer',
+        '../Core/defined',
+        '../Core/PixelFormat',
+        '../Core/RuntimeError',
+        '../ThirdParty/crunch',
+        './createTaskProcessorWorker'
+    ], function(
+        CompressedTextureBuffer,
+        defined,
+        PixelFormat,
+        RuntimeError,
+        crunch,
+        createTaskProcessorWorker) {
     'use strict';
 
     // Modified from texture-tester
@@ -110,7 +108,7 @@ define([
         var dstSize = 0;
         var i;
         for (i = 0; i < levels; ++i) {
-            dstSize += PixelFormat.compressedTextureSize(format, width >> i, height >> i);
+            dstSize += PixelFormat.compressedTextureSizeInBytes(format, width >> i, height >> i);
         }
 
         // Allocate enough space on the emscripten heap to hold the decoded DXT data
@@ -133,7 +131,7 @@ define([
 
         // Mipmaps are unsupported, so copy the level 0 texture
         // When mipmaps are supported, a copy will still be necessary as dxtData is a view on the heap.
-        var length = PixelFormat.compressedTextureSize(format, width, height);
+        var length = PixelFormat.compressedTextureSizeInBytes(format, width, height);
         var level0DXTData = new Uint8Array(length);
         level0DXTData.set(dxtData, 0);
 
