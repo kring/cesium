@@ -260,14 +260,19 @@ define([
     }
 
     function getPickFragmentShaderCallback(content) {
+        var batchTable = content.batchTable;
+        var batchTableCallback = batchTable.getPickFragmentShaderCallback();
+        var tilesetCallback = content._tileset._pickFragmentShaderLoaded;
+
+        if (!defined(batchTableCallback) && !defined(tilesetCallback)) {
+            return undefined;
+        }
+
         return function(fs) {
-            var batchTable = content.batchTable;
-            var batchTableCallback = batchTable.getPickFragmentShaderCallback();
             if (defined(batchTableCallback)) {
                 fs = batchTableCallback(fs);
             }
 
-            var tilesetCallback = content._tileset._pickFragmentShaderLoaded;
             if (defined(tilesetCallback)) {
                 fs = tilesetCallback(fs);
             }
@@ -294,14 +299,19 @@ define([
     }
 
     function getPickUniformMapCallback(content) {
+        var batchTable = content.batchTable;
+        var batchTableCallback = batchTable.getPickUniformMapCallback();
+        var tilesetCallback = content._tileset._pickUniformMapLoaded;
+
+        if (!defined(batchTableCallback) && !defined(tilesetCallback)) {
+            return undefined;
+        }
+
         return function(uniformMap) {
-            var batchTable = content.batchTable;
-            var batchTableCallback = batchTable.getPickUniformMapCallback();
             if (defined(batchTableCallback)) {
                 uniformMap = batchTableCallback(uniformMap);
             }
 
-            var tilesetCallback = content._tileset._pickUniformMapLoaded;
             if (defined(tilesetCallback)) {
                 uniformMap = tilesetCallback(uniformMap);
             }
