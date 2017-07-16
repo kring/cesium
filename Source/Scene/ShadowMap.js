@@ -1,4 +1,3 @@
-/*global define*/
 define([
         '../Core/BoundingRectangle',
         '../Core/BoundingSphere',
@@ -45,7 +44,7 @@ define([
         './CullFace',
         './CullingVolume',
         './DebugCameraPrimitive',
-        './OrthographicFrustum',
+        './OrthographicOffCenterFrustum',
         './PerInstanceColorAppearance',
         './PerspectiveFrustum',
         './Primitive',
@@ -96,7 +95,7 @@ define([
         CullFace,
         CullingVolume,
         DebugCameraPrimitive,
-        OrthographicFrustum,
+        OrthographicOffCenterFrustum,
         PerInstanceColorAppearance,
         PerspectiveFrustum,
         Primitive,
@@ -254,7 +253,7 @@ define([
         this._isSpotLight = false;
         if (this._cascadesEnabled) {
             // Cascaded shadows are always orthographic. The frustum dimensions are calculated on the fly.
-            this._shadowMapCamera.frustum = new OrthographicFrustum();
+            this._shadowMapCamera.frustum = new OrthographicOffCenterFrustum();
         } else if (defined(this._lightCamera.frustum.fov)) {
             // If the light camera uses a perspective frustum, then the light source is a spot light
             this._isSpotLight = true;
@@ -1003,6 +1002,8 @@ define([
     var scratchSplits = new Array(5);
     var scratchFrustum = new PerspectiveFrustum();
     var scratchCascadeDistances = new Array(4);
+    var scratchMin = new Cartesian3();
+    var scratchMax = new Cartesian3();
 
     function computeCascades(shadowMap, frameState) {
         var shadowMapCamera = shadowMap._shadowMapCamera;
@@ -1127,8 +1128,6 @@ define([
     var scratchLightView = new Matrix4();
     var scratchRight = new Cartesian3();
     var scratchUp = new Cartesian3();
-    var scratchMin = new Cartesian3();
-    var scratchMax = new Cartesian3();
     var scratchTranslation = new Cartesian3();
 
     function fitShadowMapToScene(shadowMap, frameState) {

@@ -1,47 +1,49 @@
-/*global define*/
 define([
-        '../Core/defined',
+        '../Core/defaultValue',
         '../Core/defineProperties',
         '../Core/destroyObject',
-        '../ThirdParty/when',
-        './Cesium3DTileContentState'
+        '../Core/getStringFromTypedArray',
+        '../Core/RuntimeError',
+        '../ThirdParty/when'
     ], function(
-        defined,
+        defaultValue,
         defineProperties,
         destroyObject,
-        when,
-        Cesium3DTileContentState) {
+        getStringFromTypedArray,
+        RuntimeError,
+        when) {
     'use strict';
 
     /**
      * Represents content for a tile in a
      * {@link https://github.com/AnalyticalGraphicsInc/3d-tiles/blob/master/README.md|3D Tiles} tileset whose
      * content points to another 3D Tiles tileset.
+     * <p>
+     * Implements the {@link Cesium3DTileContent} interface.
+     * </p>
      *
      * @alias Tileset3DTileContent
      * @constructor
      *
      * @private
      */
-    function Tileset3DTileContent(tileset, tile, url) {
+    function Tileset3DTileContent(tileset, tile, url, arrayBuffer, byteOffset) {
         this._tileset = tileset;
         this._tile = tile;
         this._url = url;
+        this._readyPromise = when.defer();
 
         /**
-         * The following properties are part of the {@link Cesium3DTileContent} interface.
+         * @inheritdoc Cesium3DTileContent#featurePropertiesDirty
          */
-        this.state = Cesium3DTileContentState.UNLOADED;
-        this.batchTable = undefined;
         this.featurePropertiesDirty = false;
 
-        this._contentReadyToProcessPromise = when.defer();
-        this._readyPromise = when.defer();
+        initialize(this, arrayBuffer, byteOffset);
     }
 
     defineProperties(Tileset3DTileContent.prototype, {
         /**
-         * Part of the {@link Cesium3DTileContent} interface.
+         * @inheritdoc Cesium3DTileContent#featuresLength
          */
         featuresLength : {
             get : function() {
@@ -50,7 +52,7 @@ define([
         },
 
         /**
-         * Part of the {@link Cesium3DTileContent} interface.
+         * @inheritdoc Cesium3DTileContent#pointsLength
          */
         pointsLength : {
             get : function() {
@@ -59,7 +61,43 @@ define([
         },
 
         /**
-         * Part of the {@link Cesium3DTileContent} interface.
+         * @inheritdoc Cesium3DTileContent#trianglesLength
+         */
+        trianglesLength : {
+            get : function() {
+                return 0;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#geometryByteLength
+         */
+        geometryByteLength : {
+            get : function() {
+                return 0;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#texturesByteLength
+         */
+        texturesByteLength : {
+            get : function() {
+                return 0;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#batchTableByteLength
+         */
+        batchTableByteLength : {
+            get : function() {
+                return 0;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#innerContents
          */
         innerContents : {
             get : function() {
@@ -68,23 +106,67 @@ define([
         },
 
         /**
-         * Part of the {@link Cesium3DTileContent} interface.
-         */
-        contentReadyToProcessPromise : {
-            get : function() {
-                return this._contentReadyToProcessPromise.promise;
-            }
-        },
-
-        /**
-         * Part of the {@link Cesium3DTileContent} interface.
+         * @inheritdoc Cesium3DTileContent#readyPromise
          */
         readyPromise : {
             get : function() {
                 return this._readyPromise.promise;
             }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#tileset
+         */
+        tileset : {
+            get : function() {
+                return this._tileset;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#tile
+         */
+        tile : {
+            get : function() {
+                return this._tile;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#url
+         */
+        url : {
+            get : function() {
+                return this._url;
+            }
+        },
+
+        /**
+         * @inheritdoc Cesium3DTileContent#batchTable
+         */
+        batchTable : {
+            get : function() {
+                return undefined;
+            }
         }
     });
+
+    function initialize(content, arrayBuffer, byteOffset) {
+        byteOffset = defaultValue(byteOffset, 0);
+        var uint8Array = new Uint8Array(arrayBuffer);
+        var jsonString = getStringFromTypedArray(uint8Array, byteOffset);
+        var tilesetJson;
+
+        try {
+            tilesetJson = JSON.parse(jsonString);
+        } catch (error) {
+            content._readyPromise.reject(new RuntimeError('Invalid tile content.'));
+            return;
+        }
+
+        content._tileset.loadTileset(content._url, tilesetJson, content._tile);
+        content._readyPromise.resolve(content);
+    }
 
     /**
      * Part of the {@link Cesium3DTileContent} interface.  <code>Tileset3DTileContent</code>
@@ -103,58 +185,32 @@ define([
     };
 
     /**
-     * Part of the {@link Cesium3DTileContent} interface.
-     */
-    Tileset3DTileContent.prototype.request = function() {
-        var that = this;
-
-        this.state = Cesium3DTileContentState.LOADING;
-        this._tileset.loadTileset(this._url, this._tile).then(function() {
-            that.state = Cesium3DTileContentState.PROCESSING;
-            that._contentReadyToProcessPromise.resolve(that);
-            that.state = Cesium3DTileContentState.READY;
-            that._readyPromise.resolve(that);
-        }).otherwise(function(error) {
-            that.state = Cesium3DTileContentState.FAILED;
-            that._readyPromise.reject(error);
-        });
-        return true;
-    };
-
-    /**
-     * Part of the {@link Cesium3DTileContent} interface.
-     */
-    Tileset3DTileContent.prototype.initialize = function(arrayBuffer, byteOffset) {
-    };
-
-    /**
-     * Part of the {@link Cesium3DTileContent} interface.
+     * @inheritdoc Cesium3DTileContent#applyDebugSettings
      */
     Tileset3DTileContent.prototype.applyDebugSettings = function(enabled, color) {
     };
 
     /**
-     * Part of the {@link Cesium3DTileContent} interface.
+     * @inheritdoc Cesium3DTileContent#applyStyle
      */
-    Tileset3DTileContent.prototype.applyStyleWithShader = function(frameState, style) {
-        return false;
+    Tileset3DTileContent.prototype.applyStyle = function(frameState, style) {
     };
 
     /**
-     * Part of the {@link Cesium3DTileContent} interface.
+     * @inheritdoc Cesium3DTileContent#update
      */
     Tileset3DTileContent.prototype.update = function(tileset, frameState) {
     };
 
     /**
-     * Part of the {@link Cesium3DTileContent} interface.
+     * @inheritdoc Cesium3DTileContent#isDestroyed
      */
     Tileset3DTileContent.prototype.isDestroyed = function() {
         return false;
     };
 
     /**
-     * Part of the {@link Cesium3DTileContent} interface.
+     * @inheritdoc Cesium3DTileContent#destroy
      */
     Tileset3DTileContent.prototype.destroy = function() {
         return destroyObject(this);

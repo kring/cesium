@@ -1,4 +1,3 @@
-/*global define*/
 define([
         '../Core/Cartesian3',
         '../Core/Cartesian4',
@@ -43,7 +42,7 @@ define([
 
     var scratchPlaneCenter = new Cartesian3();
     var scratchPlaneNormal = new Cartesian3();
-    var scratchPlane = new Plane(new Cartesian3(), 0.0);
+    var scratchPlane = new Plane(new Cartesian3(1.0, 0.0, 0.0), 0.0);
 
     /**
      * Constructs a culling volume from a bounding sphere. Creates six planes that create a box containing the sphere.

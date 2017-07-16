@@ -1,4 +1,3 @@
-/*global define*/
 define([
         '../Core/BoundingSphere',
         '../Core/Cartesian2',
@@ -35,8 +34,6 @@ define([
         '../Core/PrimitiveType',
         '../Core/Quaternion',
         '../Core/Queue',
-        '../Core/Request',
-        '../Core/RequestScheduler',
         '../Core/RuntimeError',
         '../Core/Transforms',
         '../Core/WebGLConstants',
@@ -55,6 +52,7 @@ define([
         '../ThirdParty/gltfDefaults',
         '../ThirdParty/Uri',
         '../ThirdParty/when',
+        './AttributeType',
         './Axis',
         './BlendingState',
         './ColorBlendMode',
@@ -106,8 +104,6 @@ define([
         PrimitiveType,
         Quaternion,
         Queue,
-        Request,
-        RequestScheduler,
         RuntimeError,
         Transforms,
         WebGLConstants,
@@ -126,6 +122,7 @@ define([
         gltfDefaults,
         Uri,
         when,
+        AttributeType,
         Axis,
         BlendingState,
         ColorBlendMode,
@@ -158,8 +155,8 @@ define([
         FAILED : 3
     };
 
-    // GLTF_SPEC: Figure out correct mime types (https://github.com/KhronosGroup/glTF/issues/412)
-    var defaultModelAccept = 'model/vnd.gltf.binary,model/vnd.gltf+json,model/gltf.binary,model/gltf+json;q=0.8,application/json;q=0.2,*/*;q=0.01';
+    // glTF MIME types discussed in https://github.com/KhronosGroup/glTF/issues/412 and https://github.com/KhronosGroup/glTF/issues/943
+    var defaultModelAccept = 'model/gltf-binary,model/gltf+json;q=0.8,application/json;q=0.2,*/*;q=0.01';
 
     function LoadResources() {
         this.vertexBuffersToCreate = new Queue();
@@ -542,8 +539,7 @@ define([
          *
          * @private
          */
-        this.pickPrimitive = options.pickPrimitive;
-
+        this._pickObject = options.pickObject;
         this._allowPicking = defaultValue(options.allowPicking, true);
 
         this._ready = false;
@@ -689,6 +685,12 @@ define([
         };
         this._cachedRendererResources = undefined;
         this._loadRendererResourcesFromCache = false;
+
+        this._cachedGeometryByteLength = 0;
+        this._cachedTexturesByteLength = 0;
+        this._geometryByteLength = 0;
+        this._texturesByteLength = 0;
+        this._trianglesLength = 0;
 
         this._nodeCommands = [];
         this._pickIds = [];
@@ -991,6 +993,61 @@ define([
             get : function() {
                 return this._upAxis;
             }
+        },
+
+        /**
+         * Gets the model's triangle count.
+         *
+         * @private
+         */
+        trianglesLength : {
+            get : function() {
+                return this._trianglesLength;
+            }
+        },
+
+        /**
+         * Gets the model's geometry memory in bytes. This includes all vertex and index buffers.
+         *
+         * @private
+         */
+        geometryByteLength : {
+            get : function() {
+                return this._geometryByteLength;
+            }
+        },
+
+        /**
+         * Gets the model's texture memory in bytes.
+         *
+         * @private
+         */
+        texturesByteLength : {
+            get : function() {
+                return this._texturesByteLength;
+            }
+        },
+
+        /**
+         * Gets the model's cached geometry memory in bytes. This includes all vertex and index buffers.
+         *
+         * @private
+         */
+        cachedGeometryByteLength : {
+            get : function() {
+                return this._cachedGeometryByteLength;
+            }
+        },
+
+        /**
+         * Gets the model's cached texture memory in bytes.
+         *
+         * @private
+         */
+        cachedTexturesByteLength : {
+            get : function() {
+                return this._cachedTexturesByteLength;
+            }
         }
     });
 
@@ -1076,6 +1133,7 @@ define([
      * @param {Object} options Object with the following properties:
      * @param {String} options.url The url to the .gltf file.
      * @param {Object} [options.headers] HTTP headers to send with the request.
+     * @param {String} [options.basePath] The base path that paths in the glTF JSON are relative to.
      * @param {Boolean} [options.show=true] Determines if the model primitive will be shown.
      * @param {Matrix4} [options.modelMatrix=Matrix4.IDENTITY] The 4x4 transformation matrix that transforms the model from model to world coordinates.
      * @param {Number} [options.scale=1.0] A uniform scale applied to this model.
@@ -1133,10 +1191,15 @@ define([
         // If no cache key is provided, use the absolute URL, since two URLs with
         // different relative paths could point to the same model.
         var cacheKey = defaultValue(options.cacheKey, getAbsoluteUri(url));
+        var basePath = defaultValue(options.basePath, getBaseUri(url, true));
 
         options = clone(options);
-        options.basePath = getBaseUri(url, true);
+        if (defined(options.basePath) && !defined(options.cacheKey)) {
+            cacheKey += basePath;
+        }
+
         options.cacheKey = cacheKey;
+        options.basePath = basePath;
         var model = new Model(options);
 
         options.headers = defined(options.headers) ? clone(options.headers) : {};
@@ -1154,7 +1217,7 @@ define([
             setCachedGltf(model, cachedGltf);
             gltfCache[cacheKey] = cachedGltf;
 
-            RequestScheduler.request(url, loadArrayBuffer, options.headers, options.requestType).then(function(arrayBuffer) {
+            loadArrayBuffer(url, options.headers).then(function(arrayBuffer) {
                 var array = new Uint8Array(arrayBuffer);
                 if (containsGltfMagic(array)) {
                     // Load binary glTF
@@ -1366,8 +1429,7 @@ define([
                 else if (buffer.type === 'arraybuffer') {
                     ++model._loadResources.pendingBufferLoads;
                     var bufferPath = joinUrls(model._baseUri, buffer.uri);
-                    var promise = RequestScheduler.request(bufferPath, loadArrayBuffer, undefined, model._requestType);
-                    promise.then(bufferLoad(model, id)).otherwise(getFailedLoadFunction(model, 'buffer', bufferPath));
+                    loadArrayBuffer(bufferPath).then(bufferLoad(model, id)).otherwise(getFailedLoadFunction(model, 'buffer', bufferPath));
                 }
             }
         }
@@ -1449,8 +1511,7 @@ define([
                 } else {
                     ++model._loadResources.pendingShaderLoads;
                     var shaderPath = joinUrls(model._baseUri, shader.uri);
-                    var promise = RequestScheduler.request(shaderPath, loadText, undefined, model.requestType);
-                    promise.then(shaderLoad(model, shader.type, id)).otherwise(getFailedLoadFunction(model, 'shader', shaderPath));
+                    loadText(shaderPath).then(shaderLoad(model, shader.type, id)).otherwise(getFailedLoadFunction(model, 'shader', shaderPath));
                 }
             }
         }
@@ -1486,13 +1547,15 @@ define([
     function parseTextures(model, context) {
         var images = model.gltf.images;
         var textures = model.gltf.textures;
+        var binary;
+        var uri;
         for (var id in textures) {
             if (textures.hasOwnProperty(id)) {
                 var gltfImage = images[textures[id].source];
                 var extras = gltfImage.extras;
 
-                var binary = undefined;
-                var uri = undefined;
+                binary = undefined;
+                uri = undefined;
 
                 // First check for a compressed texture
                 if (defined(extras) && defined(extras.compressedImage3DTiles)) {
@@ -1547,15 +1610,17 @@ define([
                     });
                 } else {
                     ++model._loadResources.pendingTextureLoads;
-                    var imagePath = joinUrls(model._baseUri, gltfImage.uri);
+                    var imagePath = joinUrls(model._baseUri, uri);
 
+                    var promise;
                     if (ktxRegex.test(imagePath)) {
-                        loadKTX(imagePath).then(imageLoad(model, id)).otherwise(getFailedLoadFunction(model, 'image', imagePath));
+                        promise = loadKTX(imagePath);
                     } else if (crnRegex.test(imagePath)) {
-                        loadCRN(imagePath).then(imageLoad(model, id)).otherwise(getFailedLoadFunction(model, 'image', imagePath));
+                        promise = loadCRN(imagePath);
                     } else {
-                        loadImage(imagePath).then(imageLoad(model, id)).otherwise(getFailedLoadFunction(model, 'image', imagePath));
+                        promise = loadImage(imagePath);
                     }
+                    promise.then(imageLoad(model, id)).otherwise(getFailedLoadFunction(model, 'image', imagePath));
                 }
             }
         }
@@ -1754,6 +1819,7 @@ define([
         });
         vertexBuffer.vertexArrayDestroyable = false;
         model._rendererResources.buffers[bufferViewId] = vertexBuffer;
+        model._geometryByteLength += vertexBuffer.sizeInBytes;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1791,6 +1857,7 @@ define([
         });
         indexBuffer.vertexArrayDestroyable = false;
         model._rendererResources.buffers[bufferViewId] = indexBuffer;
+        model._geometryByteLength += indexBuffer.sizeInBytes;
     }
 
     var scratchVertexBufferJob = new CreateVertexBufferJob();
@@ -2330,6 +2397,7 @@ define([
         }
 
         model._rendererResources.textures[gltfTexture.id] = tx;
+        model._texturesByteLength += tx.sizeInBytes;
     }
 
     var scratchCreateTextureJob = new CreateTextureJob();
@@ -2622,18 +2690,14 @@ define([
                             if (defined(attributeLocation)) {
                                 var a = accessors[primitiveAttributes[attributeName]];
 
-                                var componentType = a.componentType;
-                                // XXX: if uint32, pretend it's really uint16.
-                                componentType = componentType === 5125 ? 5123 : componentType;
-
                                 attributes.push({
                                     index : attributeLocation,
                                     vertexBuffer : rendererBuffers[a.bufferView],
                                     componentsPerAttribute : getBinaryAccessor(a).componentsPerAttribute,
-                                    componentDatatype      : componentType,
-                                    normalize              : false,
-                                    offsetInBytes          : a.byteOffset,
-                                    strideInBytes          : a.byteStride
+                                    componentDatatype : a.componentType,
+                                    normalize : false,
+                                    offsetInBytes : a.byteOffset,
+                                    strideInBytes : a.byteStride
                                 });
                             }
                         }
@@ -3230,19 +3294,19 @@ define([
                         var uniformVariable = 'gltf_u_dec_' + attribute.toLowerCase();
 
                         switch (a.type) {
-                            case 'SCALAR':
+                            case AttributeType.SCALAR:
                                 uniformMap[uniformVariable] = getMat2UniformFunction(decodeMatrix, model).func;
                                 setUniforms[uniformVariable] = true;
                                 break;
-                            case 'VEC2':
+                            case AttributeType.VEC2:
                                 uniformMap[uniformVariable] = getMat3UniformFunction(decodeMatrix, model).func;
                                 setUniforms[uniformVariable] = true;
                                 break;
-                            case 'VEC3':
+                            case AttributeType.VEC3:
                                 uniformMap[uniformVariable] = getMat4UniformFunction(decodeMatrix, model).func;
                                 setUniforms[uniformVariable] = true;
                                 break;
-                            case 'VEC4':
+                            case AttributeType.VEC4:
                                 // VEC4 attributes are split into scale and translate because there is no mat5 in GLSL
                                 var uniformVariableScale = uniformVariable + '_scale';
                                 var uniformVariableTranslate = uniformVariable + '_translate';
@@ -3318,6 +3382,18 @@ define([
         };
     }
 
+    function triangleCountFromPrimitiveIndices(primitive, indicesCount) {
+        switch (primitive.mode) {
+            case PrimitiveType.TRIANGLES:
+                return (indicesCount / 3);
+            case PrimitiveType.TRIANGLE_STRIP:
+            case PrimitiveType.TRIANGLE_FAN:
+                return Math.max(indicesCount - 2, 0);
+            default:
+                return 0;
+        }
+    }
+
     function createCommand(model, gltfNode, runtimeNode, context, scene3DOnly) {
         var nodeCommands = model._nodeCommands;
         var pickIds = model._pickIds;
@@ -3377,6 +3453,9 @@ define([
                     offset = 0;
                 }
 
+                // Update model triangle count using number of indices
+                model._trianglesLength += triangleCountFromPrimitiveIndices(primitive, count);
+
                 var um = uniformMaps[primitive.material];
                 var uniformMap = um.uniformMap;
                 if (defined(um.jointMatrixUniformName)) {
@@ -3406,13 +3485,16 @@ define([
 
                 // GLTF_SPEC: Offical means to determine translucency. https://github.com/KhronosGroup/glTF/issues/105
                 var isTranslucent = rs.blending.enabled;
-                var owner = {
-                    primitive : defaultValue(model.pickPrimitive, model),
-                    id : model.id,
-                    model : model,
-                    node : runtimeNode.publicNode,
-                    mesh : runtimeMeshesByName[mesh.name]
-                };
+
+                var owner = model._pickObject;
+                if (!defined(owner)) {
+                    owner = {
+                        primitive : model,
+                        id : model.id,
+                        node : runtimeNode.publicNode,
+                        mesh : runtimeMeshesByName[mesh.name]
+                    };
+                }
 
                 var castShadows = ShadowMode.castShadows(model._shadows);
                 var receiveShadows = ShadowMode.receiveShadows(model._shadows);
@@ -3587,6 +3669,26 @@ define([
         model._runtime.nodes = runtimeNodes;
     }
 
+    function getGeometryByteLength(buffers) {
+        var memory = 0;
+        for (var id in buffers) {
+            if (buffers.hasOwnProperty(id)) {
+                memory += buffers[id].sizeInBytes;
+            }
+        }
+        return memory;
+    }
+
+    function getTexturesByteLength(textures) {
+        var memory = 0;
+        for (var id in textures) {
+            if (textures.hasOwnProperty(id)) {
+                memory += textures[id].sizeInBytes;
+            }
+        }
+        return memory;
+    }
+
     function createResources(model, frameState) {
         var context = frameState.context;
         var scene3DOnly = frameState.scene3DOnly;
@@ -3608,6 +3710,9 @@ define([
             if (defined(model._precreatedAttributes)) {
                 createVertexArrays(model, context);
             }
+
+            model._cachedGeometryByteLength += getGeometryByteLength(cachedResources.buffers);
+            model._cachedTexturesByteLength += getTexturesByteLength(cachedResources.textures);
         } else {
             createBuffers(model, frameState); // using glTF bufferViews
             createPrograms(model, frameState);
@@ -3795,7 +3900,6 @@ define([
             }
         }
     }
-
 
     function updatePerNodeShow(model) {
         // Totally not worth it, but we could optimize this:
@@ -4214,7 +4318,7 @@ define([
         var extensionsUsed = model.gltf.extensionsUsed;
         if (defined(extensionsUsed)) {
             var extensionsUsedCount = extensionsUsed.length;
-            for (var index=0;index<extensionsUsedCount;++index) {
+            for (var index = 0; index < extensionsUsedCount; ++index) {
                 var extension = extensionsUsed[index];
 
                 if (extension !== 'CESIUM_RTC' && extension !== 'KHR_binary_glTF' &&
@@ -4602,6 +4706,7 @@ define([
         // and then have them visible immediately when show is set to true.
         if (show && !this._ignoreCommands) {
             // PERFORMANCE_IDEA: This is terrible
+            var commandList = frameState.commandList;
             var passes = frameState.passes;
             var nodeCommands = this._nodeCommands;
             var length = nodeCommands.length;
@@ -4617,13 +4722,13 @@ define([
                     if (nc.show) {
                         var command = translucent ? nc.translucentCommand : nc.command;
                         command = silhouette ? nc.silhouetteModelCommand : command;
-                        frameState.addCommand(command);
+                        commandList.push(command);
                         boundingVolume = nc.command.boundingVolume;
                         if (frameState.mode === SceneMode.SCENE2D &&
                             (boundingVolume.center.y + boundingVolume.radius > idl2D || boundingVolume.center.y - boundingVolume.radius < idl2D)) {
                             var command2D = translucent ? nc.translucentCommand2D : nc.command2D;
                             command2D = silhouette ? nc.silhouetteModelCommand2D : command2D;
-                            frameState.addCommand(command2D);
+                            commandList.push(command2D);
                         }
                     }
                 }
@@ -4633,11 +4738,11 @@ define([
                     for (i = 0; i < length; ++i) {
                         nc = nodeCommands[i];
                         if (nc.show) {
-                            frameState.addCommand(nc.silhouetteColorCommand);
+                            commandList.push(nc.silhouetteColorCommand);
                             boundingVolume = nc.command.boundingVolume;
                             if (frameState.mode === SceneMode.SCENE2D &&
                                 (boundingVolume.center.y + boundingVolume.radius > idl2D || boundingVolume.center.y - boundingVolume.radius < idl2D)) {
-                                frameState.addCommand(nc.silhouetteColorCommand2D);
+                                commandList.push(nc.silhouetteColorCommand2D);
                             }
                         }
                     }
@@ -4649,12 +4754,12 @@ define([
                     nc = nodeCommands[i];
                     if (nc.show) {
                         var pickCommand = nc.pickCommand;
-                        frameState.addCommand(pickCommand);
+                        commandList.push(pickCommand);
 
                         boundingVolume = pickCommand.boundingVolume;
                         if (frameState.mode === SceneMode.SCENE2D &&
                             (boundingVolume.center.y + boundingVolume.radius > idl2D || boundingVolume.center.y - boundingVolume.radius < idl2D)) {
-                            frameState.addCommand(nc.pickCommand2D);
+                            commandList.push(nc.pickCommand2D);
                         }
                     }
                 }

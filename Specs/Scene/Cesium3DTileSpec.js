@@ -1,16 +1,17 @@
-/*global defineSuite*/
 defineSuite([
         'Scene/Cesium3DTile',
         'Core/Cartesian3',
         'Core/clone',
         'Core/defined',
         'Core/HeadingPitchRoll',
+        'Core/loadWithXhr',
         'Core/Math',
         'Core/Matrix3',
         'Core/Matrix4',
         'Core/Rectangle',
         'Core/SphereOutlineGeometry',
         'Core/Transforms',
+        'Scene/Cesium3DTileRefine',
         'Scene/TileBoundingRegion',
         'Scene/TileOrientedBoundingBox',
         'Specs/createScene'
@@ -20,12 +21,14 @@ defineSuite([
         clone,
         defined,
         HeadingPitchRoll,
+        loadWithXhr,
         CesiumMath,
         Matrix3,
         Matrix4,
         Rectangle,
         SphereOutlineGeometry,
         Transforms,
+        Cesium3DTileRefine,
         TileBoundingRegion,
         TileOrientedBoundingBox,
         createScene) {
@@ -33,7 +36,7 @@ defineSuite([
 
     var tileWithBoundingSphere = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         boundingVolume : {
             sphere: [0.0, 0.0, 0.0, 5.0]
@@ -42,7 +45,7 @@ defineSuite([
 
     var tileWithContentBoundingSphere = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         content : {
             url : '0/0.b3dm',
             boundingVolume : {
@@ -57,7 +60,7 @@ defineSuite([
 
     var tileWithBoundingRegion = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         boundingVolume: {
             region : [-1.2, -1.2, 0.0, 0.0, -30, -34]
@@ -66,7 +69,7 @@ defineSuite([
 
     var tileWithContentBoundingRegion = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         content : {
             url : '0/0.b3dm',
@@ -81,7 +84,7 @@ defineSuite([
 
     var tileWithBoundingBox = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         boundingVolume: {
             box : [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
@@ -90,7 +93,7 @@ defineSuite([
 
     var tileWithContentBoundingBox = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         content : {
             url : '0/0.b3dm',
@@ -105,7 +108,7 @@ defineSuite([
 
     var tileWithViewerRequestVolume = {
         geometricError : 1,
-        refine : 'replace',
+        refine : 'REPLACE',
         children : [],
         boundingVolume: {
             box : [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0]
@@ -115,22 +118,11 @@ defineSuite([
         }
     };
 
-    var tileWithInvalidExtension = {
-        geometricError : 1,
-        refine : 'replace',
-        children : [],
-        content : {
-            url : '0/0.xxxx'
-        },
-        boundingVolume: {
-            box : [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-        }
-    };
-
     var mockTileset = {
         debugShowBoundingVolume : true,
         debugShowViewerRequestVolume : true,
-        modelMatrix : Matrix4.IDENTITY
+        modelMatrix : Matrix4.IDENTITY,
+        _geometricError : 2
     };
 
     var centerLongitude = -1.31968;
@@ -143,17 +135,54 @@ defineSuite([
         return Matrix4.pack(transformMatrix, new Array(16));
     }
 
-    it('throws if content has an unsupported extension', function() {
-        expect(function() {
-            return new Cesium3DTile(mockTileset, '/some_url', tileWithInvalidExtension, undefined);
-        }).toThrowDeveloperError();
-    });
-
     it('destroys', function() {
         var tile = new Cesium3DTile(mockTileset, '/some_url', tileWithBoundingSphere, undefined);
         expect(tile.isDestroyed()).toEqual(false);
         tile.destroy();
         expect(tile.isDestroyed()).toEqual(true);
+    });
+
+    it('throws if boundingVolume is undefined', function() {
+        var tileWithoutBoundingVolume = clone(tileWithBoundingSphere, true);
+        delete tileWithoutBoundingVolume.boundingVolume;
+        expect(function() {
+            return new Cesium3DTile(mockTileset, '/some_url', tileWithoutBoundingVolume, undefined);
+        }).toThrowRuntimeError();
+    });
+
+    it('throws if boundingVolume does not contain a sphere, region, or box', function() {
+        var tileWithoutBoundingVolume = clone(tileWithBoundingSphere, true);
+        delete tileWithoutBoundingVolume.boundingVolume.sphere;
+        expect(function() {
+            return new Cesium3DTile(mockTileset, '/some_url', tileWithoutBoundingVolume, undefined);
+        }).toThrowRuntimeError();
+    });
+
+    it('logs deprecation warning if refine is lowercase', function() {
+        spyOn(Cesium3DTile, '_deprecationWarning');
+        var header = clone(tileWithBoundingSphere, true);
+        header.refine = 'replace';
+        var tile = new Cesium3DTile(mockTileset, '/some_url', header, undefined);
+        expect(tile.refine).toBe(Cesium3DTileRefine.REPLACE);
+        expect(Cesium3DTile._deprecationWarning).toHaveBeenCalled();
+    });
+
+    it('logs deprecation warning if geometric error is undefined', function() {
+        spyOn(Cesium3DTile, '_deprecationWarning');
+
+        var geometricErrorMissing = clone(tileWithBoundingSphere, true);
+        delete geometricErrorMissing.geometricError;
+
+        var parent = new Cesium3DTile(mockTileset, '/some_url', tileWithBoundingSphere, undefined);
+        var child = new Cesium3DTile(mockTileset, '/some_url', geometricErrorMissing, parent);
+        expect(child.geometricError).toBe(parent.geometricError);
+        expect(child.geometricError).toBe(1);
+
+        var tile = new Cesium3DTile(mockTileset, '/some_url', geometricErrorMissing, undefined);
+        expect(tile.geometricError).toBe(mockTileset._geometricError);
+        expect(tile.geometricError).toBe(2);
+
+        expect(Cesium3DTile._deprecationWarning.calls.count()).toBe(2);
     });
 
     describe('bounding volumes', function() {

@@ -1,4 +1,3 @@
-/*global define*/
 define([
         '../Core/defined',
         '../Core/defineProperties',
@@ -70,9 +69,11 @@ define([
      * @private
      */
     function JobScheduler(budgets) {
+        //>>includeStart('debug', pragmas.debug);
         if (defined(budgets) && (budgets.length !== JobType.NUMBER_OF_JOB_TYPES)) {
             throw new DeveloperError('A budget must be specified for each job type; budgets.length should equal JobType.NUMBER_OF_JOB_TYPES.');
         }
+        //>>includeEnd('debug');
 
         // Total for defaults is half of of one frame at 10 fps
         var jobBudgets = new Array(JobType.NUMBER_OF_JOB_TYPES);
@@ -147,7 +148,8 @@ define([
         if ((budget.usedThisFrame + budget.stolenFromMeThisFrame >= budget.total)) {
             // No budget remaining for jobs of this type. Try to steal from other job types.
             var length = budgets.length;
-            for (var i = 0; i < length; ++i) {
+            var i;
+            for (i = 0; i < length; ++i) {
                 stolenBudget = budgets[i];
 
                 // Steal from this budget if it has time left and it wasn't starved last fame
@@ -157,7 +159,7 @@ define([
                 }
             }
 
-            if ((i === length) && progressThisFrame) {
+            if (i === length && progressThisFrame) {
                 // No other job types can give up their budget this frame, and
                 // this job type already progressed this frame
                 return false;
